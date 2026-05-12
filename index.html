@@ -1,0 +1,941 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Cube Tac Toe</title>
+  <style>
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body {
+      overflow:hidden; background:#09091a;
+      font-family:'Segoe UI',system-ui,sans-serif;
+      color:#e8e8f0; width:100vw; height:100vh;
+      user-select:none;
+    }
+    #canvas { position:absolute; inset:0; display:block; width:100%; height:100%; }
+
+    /* ── top UI ── */
+    #ui {
+      position:absolute; top:0; left:0; right:0;
+      display:flex; flex-direction:column; align-items:center;
+      gap:9px; padding:14px;
+      pointer-events:none;
+    }
+    #title {
+      font-size:19px; font-weight:800; letter-spacing:4px;
+      color:#8899ff; text-shadow:0 0 14px #3355bb;
+    }
+    #scoreboard { display:flex; gap:18px; }
+    .badge {
+      padding:5px 20px; border-radius:20px; font-weight:700; font-size:13px;
+      background:rgba(8,8,28,.75); border:2px solid transparent;
+      transition:border-color .2s,background .2s;
+    }
+    .badge.xc { color:#ff4040; }
+    .badge.oc { color:#3355ff; }
+    .badge.active { border-color:currentColor; background:rgba(255,255,255,.09); }
+    #status {
+      background:rgba(0,0,0,.65); padding:7px 24px; border-radius:12px;
+      font-size:13px; text-align:center; color:#bbc; max-width:460px;
+    }
+    #move-btns {
+      display:none; flex-wrap:wrap; justify-content:center;
+      gap:7px; max-width:390px; pointer-events:all;
+    }
+    .mbtn {
+      padding:8px 13px; min-width:50px; font-size:13px; font-weight:700;
+      font-family:inherit; border:1px solid #2a2a55; border-radius:8px;
+      background:#111138; color:#8899cc; cursor:pointer;
+      transition:background .12s, transform .1s, box-shadow .15s, color .15s;
+    }
+    .mbtn:not(:disabled):hover {
+      background:#1e1e60;
+      transform:scale(1.08);
+      box-shadow:0 0 10px 2px rgba(80,200,255,.45);
+      color:#88eeff;
+    }
+    .mbtn:disabled { opacity:.32; cursor:default; transform:none; box-shadow:none; }
+
+    /* ── AI toggle ── */
+    #ai-label {
+      display:flex; align-items:center; gap:7px;
+      font-size:12px; color:#7788bb; cursor:pointer;
+      pointer-events:all;
+      background:rgba(0,0,0,.45); padding:5px 16px; border-radius:10px;
+      border:1px solid #252548; transition:color .2s, background .2s;
+      white-space:nowrap;
+    }
+    #ai-label:hover { color:#aabde0; background:rgba(255,255,255,.06); }
+    #ai-label input { cursor:pointer; accent-color:#8899cc; width:14px; height:14px; }
+
+    /* ── game-over overlay ── */
+    #overlay {
+      display:none; position:absolute; inset:0;
+      background:rgba(0,0,0,.84); backdrop-filter:blur(5px);
+      flex-direction:column; align-items:center; justify-content:center;
+      gap:24px; z-index:20;
+    }
+    #overlay.show { display:flex; }
+    #result { font-size:40px; font-weight:800; letter-spacing:1px; }
+    #result.xw { color:#ff4040; text-shadow:0 0 32px #ff2020; }
+    #result.ow { color:#3355ff; text-shadow:0 0 32px #2240ff; }
+    #result.dr { color:#888; }
+    #play-again {
+      padding:12px 38px; font-size:16px; font-weight:700; font-family:inherit;
+      border:2px solid #3355aa; border-radius:12px;
+      background:#111138; color:#aabde0; cursor:pointer;
+      transition:all .2s;
+    }
+    #play-again:hover { background:#1e1e70; border-color:#8899cc; }
+
+    /* ── hint bar ── */
+    #hint {
+      position:absolute; bottom:11px; left:0; right:0;
+      text-align:center; font-size:11px; color:#334;
+      pointer-events:none;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="canvas"></canvas>
+
+  <div id="ui">
+    <div id="title">CUBE TAC TOE</div>
+    <div id="scoreboard">
+      <div class="badge xc" id="bx">✕  Player 1</div>
+      <div class="badge oc" id="bo">○  Player 2</div>
+    </div>
+    <label id="ai-label">
+      <input type="checkbox" id="ai-toggle"> AI Opponent (Player 2)
+    </label>
+    <div id="status"></div>
+    <div id="move-btns">
+      <button class="mbtn" data-m="U">U</button>
+      <button class="mbtn" data-m="U'">U′</button>
+      <button class="mbtn" data-m="D">D</button>
+      <button class="mbtn" data-m="D'">D′</button>
+      <button class="mbtn" data-m="F">F</button>
+      <button class="mbtn" data-m="F'">F′</button>
+      <button class="mbtn" data-m="B">B</button>
+      <button class="mbtn" data-m="B'">B′</button>
+      <button class="mbtn" data-m="L">L</button>
+      <button class="mbtn" data-m="L'">L′</button>
+      <button class="mbtn" data-m="R">R</button>
+      <button class="mbtn" data-m="R'">R′</button>
+    </div>
+  </div>
+
+  <div id="overlay">
+    <div id="result"></div>
+    <button id="play-again">Play Again</button>
+  </div>
+
+  <div id="hint">Drag to orbit the cube &nbsp;·&nbsp; Click a white sticker to place your mark</div>
+
+  <!-- ─────────────────────────────────────────────── -->
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.158.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.158.0/examples/jsm/"
+    }
+  }
+  </script>
+
+  <script type="module">
+  import * as THREE from 'three';
+  import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+  // ════════════════════════════════════════════════════════════
+  //  FACE INDEX CONSTANTS
+  //  F=0 (+Z front)  B=1 (-Z back)  L=2 (-X left)
+  //  R=3 (+X right)  U=4 (+Y top)   D=5 (-Y bottom)
+  // ════════════════════════════════════════════════════════════
+  const F=0, B=1, L=2, R=3, U=4, D=5;
+
+  const WIN_LINES = [
+    [0,1,2],[3,4,5],[6,7,8],
+    [0,3,6],[1,4,7],[2,5,8],
+    [0,4,8],[2,4,6]
+  ];
+
+  const NORMALS = [
+    new THREE.Vector3( 0, 0, 1),   // F
+    new THREE.Vector3( 0, 0,-1),   // B
+    new THREE.Vector3(-1, 0, 0),   // L
+    new THREE.Vector3( 1, 0, 0),   // R
+    new THREE.Vector3( 0, 1, 0),   // U
+    new THREE.Vector3( 0,-1, 0),   // D
+  ];
+
+  const FACE_AXIS = ['z','z','x','x','y','y'];
+  const FACE_VAL  = [ 2,  0,  0,  2,  2,  0];
+
+  // ════════════════════════════════════════════════════════════
+  //  MOVE DEFINITIONS
+  // ════════════════════════════════════════════════════════════
+  const r  = (f,i) => [f*9+i*3,   f*9+i*3+1, f*9+i*3+2];
+  const rr = (f,i) => [f*9+i*3+2, f*9+i*3+1, f*9+i*3  ];
+  const c  = (f,i) => [f*9+i,     f*9+3+i,   f*9+6+i  ];
+  const cr = (f,i) => [f*9+6+i,   f*9+3+i,   f*9+i    ];
+
+  const MOVES = {
+    U: { fi:U, s:[ r(F,0), r(R,0),  r(B,0),   r(L,0)  ] },
+    D: { fi:D, s:[ r(F,2), r(L,2),  r(B,2),   r(R,2)  ] },
+    F: { fi:F, s:[ r(U,0), c(R,0),  rr(D,2),  cr(L,2) ] },
+    B: { fi:B, s:[ r(U,2), cr(L,0), rr(D,0),  c(R,2)  ] },
+    L: { fi:L, s:[ cr(U,0),c(F,0),  cr(D,0),  cr(B,2) ] },
+    R: { fi:R, s:[ c(U,2), c(B,0),  c(D,2),   cr(F,2) ] },
+  };
+
+  const ROT_AXIS = [
+    new THREE.Vector3(0,0,1), new THREE.Vector3(0,0,1),
+    new THREE.Vector3(1,0,0), new THREE.Vector3(1,0,0),
+    new THREE.Vector3(0,1,0), new THREE.Vector3(0,1,0),
+  ];
+  const CW_ANGLE = [-Math.PI/2, Math.PI/2, Math.PI/2, -Math.PI/2, Math.PI/2, -Math.PI/2];
+
+  const CW_PERM  = [6,3,0, 7,4,1, 8,5,2];
+  const CCW_PERM = [2,5,8, 1,4,7, 0,3,6];
+
+  // ════════════════════════════════════════════════════════════
+  //  ARROW PREVIEW DATA
+  //
+  //  For each face (indexed F..D = 0..5): 4 entries describing
+  //  where to place the CW-rotation arrows.
+  //
+  //  e = edge-midpoint world position (on the face plane at dist 1
+  //      from cube centre; outward offset is added in createArrows)
+  //  d = tangential direction of movement for CW rotation
+  //
+  //  Verified against MOVES strip definitions:
+  //   F CW: top→right, right→bottom, bottom→left, left→top
+  //   B CW: top→left(-X), left(-X)→bottom, bottom→right(+X), right(+X)→top
+  //         (mirrored: "CW from outside back" = back view is mirrored)
+  //   L CW: top→front(+Z), front→bottom, bottom→back(-Z), back→top
+  //   R CW: top→back(-Z), back→bottom, bottom→front(+Z), front→top
+  //   U CW: front(+Z)→right(+X), right→back(-Z), back→left(-X), left→front
+  //   D CW: front(+Z)→left(-X), left→back(-Z), back→right(+X), right→front
+  // ════════════════════════════════════════════════════════════
+  const ARROW_DATA = [
+    // F (fi=0, face at z=+1, normal +Z)
+    [ {e:[0, 1.5, 1], d:[1,0,0]},  {e:[1.5, 0, 1], d:[0,-1,0]},
+      {e:[0,-1.5, 1], d:[-1,0,0]}, {e:[-1.5, 0, 1], d:[0,1,0]} ],
+    // B (fi=1, face at z=-1, normal -Z)
+    [ {e:[0, 1.5,-1], d:[-1,0,0]}, {e:[-1.5, 0,-1], d:[0,-1,0]},
+      {e:[0,-1.5,-1], d:[1,0,0]},  {e:[1.5, 0,-1], d:[0,1,0]} ],
+    // L (fi=2, face at x=-1, normal -X)
+    [ {e:[-1, 1.5, 0], d:[0,0,1]},  {e:[-1, 0, 1.5], d:[0,-1,0]},
+      {e:[-1,-1.5, 0], d:[0,0,-1]}, {e:[-1, 0,-1.5], d:[0,1,0]} ],
+    // R (fi=3, face at x=+1, normal +X)
+    [ {e:[1, 1.5, 0], d:[0,0,-1]}, {e:[1, 0,-1.5], d:[0,-1,0]},
+      {e:[1,-1.5, 0], d:[0,0,1]},  {e:[1, 0, 1.5], d:[0,1,0]} ],
+    // U (fi=4, face at y=+1, normal +Y)
+    [ {e:[0, 1, 1.5], d:[1,0,0]},  {e:[1.5, 1, 0], d:[0,0,-1]},
+      {e:[0, 1,-1.5], d:[-1,0,0]}, {e:[-1.5, 1, 0], d:[0,0,1]} ],
+    // D (fi=5, face at y=-1, normal -Y)
+    [ {e:[0,-1, 1.5], d:[-1,0,0]}, {e:[-1.5,-1, 0], d:[0,0,-1]},
+      {e:[0,-1,-1.5], d:[1,0,0]},  {e:[1.5,-1, 0], d:[0,0,1]} ],
+  ];
+
+  // ════════════════════════════════════════════════════════════
+  //  STICKER LOGICAL STATE
+  // ════════════════════════════════════════════════════════════
+  const stickers = Array.from({length:54}, (_,i) => ({
+    fi: Math.floor(i/9), row: Math.floor((i%9)/3), col: i%3,
+    mark: null, mesh: null,
+  }));
+
+  function faceRC(fi, gx, gy, gz) {
+    switch(fi){
+      case F: return [2-gy, gx  ];
+      case B: return [2-gy, 2-gx];
+      case L: return [2-gy, gz  ];
+      case R: return [2-gy, 2-gz];
+      case U: return [2-gz, gx  ];
+      case D: return [gz,   gx  ];
+    }
+  }
+
+  // ════════════════════════════════════════════════════════════
+  //  THREE.JS SCENE
+  // ════════════════════════════════════════════════════════════
+  const canvas = document.getElementById('canvas');
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias:true });
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x09091a);
+
+  const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
+  camera.position.set(3.5, 3.0, 4.6);
+  camera.lookAt(0, 0, 0);
+
+  scene.add(new THREE.AmbientLight(0xffffff, 0.5));
+  const sun = new THREE.DirectionalLight(0xffffff, 0.95);
+  sun.position.set(5, 8, 6);  scene.add(sun);
+  const rim = new THREE.DirectionalLight(0x6688ff, 0.38);
+  rim.position.set(-4, -3, -5); scene.add(rim);
+
+  const controls = new OrbitControls(camera, renderer.domElement);
+  controls.enablePan = false;
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.08;
+  controls.minDistance = 3.5;
+  controls.maxDistance = 10;
+
+  // ════════════════════════════════════════════════════════════
+  //  CUBE CONSTRUCTION
+  // ════════════════════════════════════════════════════════════
+  const cubieGroup = new THREE.Group();
+  scene.add(cubieGroup);
+
+  const stickerMeshes = [];
+
+  const bodyGeo    = new THREE.BoxGeometry(0.935, 0.935, 0.935);
+  const stickerGeo = new THREE.PlaneGeometry(0.82, 0.82);
+  const blackMat   = new THREE.MeshLambertMaterial({ color:0x0e0e0e });
+  const SOFF       = 0.935 / 2 + 0.003;
+  const _zup       = new THREE.Vector3(0, 0, 1);
+
+  function buildCube() {
+    while (cubieGroup.children.length) cubieGroup.remove(cubieGroup.children[0]);
+    stickerMeshes.length = 0;
+    stickers.forEach(s => { s.mark = null; s.mesh = null; });
+
+    for (let gx = 0; gx < 3; gx++)
+    for (let gy = 0; gy < 3; gy++)
+    for (let gz = 0; gz < 3; gz++) {
+      if (gx===1 && gy===1 && gz===1) continue;
+
+      const cubie = new THREE.Group();
+      cubie.position.set(gx-1, gy-1, gz-1);
+      cubie.userData = { gx, gy, gz };
+      cubie.add(new THREE.Mesh(bodyGeo, blackMat));
+
+      for (let fi = 0; fi < 6; fi++) {
+        const ax = FACE_AXIS[fi], vl = FACE_VAL[fi];
+        const gv = ax==='x' ? gx : ax==='y' ? gy : gz;
+        if (gv !== vl) continue;
+
+        const [row, col] = faceRC(fi, gx, gy, gz);
+        const si = fi*9 + row*3 + col;
+
+        const mat  = new THREE.MeshLambertMaterial({ color:0xf2f2f2, side:THREE.FrontSide });
+        const mesh = new THREE.Mesh(stickerGeo, mat);
+
+        mesh.position.copy(NORMALS[fi]).multiplyScalar(SOFF);
+        mesh.quaternion.setFromUnitVectors(_zup, NORMALS[fi]);
+        mesh.userData.si = si;
+        stickers[si].mesh = mesh;
+        cubie.add(mesh);
+        stickerMeshes.push(mesh);
+      }
+      cubieGroup.add(cubie);
+    }
+  }
+  buildCube();
+
+  // ════════════════════════════════════════════════════════════
+  //  LAYER-PREVIEW: HIGHLIGHT PLANES + ROTATION ARROWS
+  //
+  //  Six semi-transparent planes (one per face) sit just above the
+  //  sticker surface and glow when the corresponding button is hovered.
+  //  Twelve arrow groups (CW + CCW for each face) show rotation direction.
+  // ════════════════════════════════════════════════════════════
+
+  // --- Face highlight planes ---
+  const highlightGeo = new THREE.PlaneGeometry(3.08, 3.08);
+  const faceHighlights = [];
+
+  for (let fi = 0; fi < 6; fi++) {
+    const mat = new THREE.MeshBasicMaterial({
+      color: 0x55ddff,
+      transparent: true,
+      opacity: 0,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+    });
+    const plane = new THREE.Mesh(highlightGeo, mat);
+    // Position just above the sticker plane
+    plane.position.copy(NORMALS[fi]).multiplyScalar(1.0 + SOFF + 0.012);
+    plane.quaternion.setFromUnitVectors(_zup, NORMALS[fi]);
+    scene.add(plane);
+    faceHighlights.push(plane);
+  }
+
+  // --- Arrow groups (CW and CCW per face = 12 total) ---
+  // Colors: CW = cyan, CCW = orange
+  const COLOR_CW  = 0x22eeff;
+  const COLOR_CCW = 0xff9922;
+  const ARROW_LEN    = 0.62;
+  const ARROW_HEAD_L = 0.21;
+  const ARROW_HEAD_W = 0.14;
+
+  // Returns a THREE.Group containing 4 ArrowHelpers for the given face / direction
+  function buildArrowGroup(fi, cw) {
+    const group = new THREE.Group();
+    const color = cw ? COLOR_CW : COLOR_CCW;
+    // Outward offset so arrows float just above stickers
+    const outwardOff = NORMALS[fi].clone().multiplyScalar(SOFF + 0.07);
+
+    for (const entry of ARROW_DATA[fi]) {
+      // World position of arrow centre
+      const centre = new THREE.Vector3(...entry.e).add(outwardOff);
+      // Tangential direction (flip if CCW)
+      const dir = new THREE.Vector3(...entry.d);
+      if (!cw) dir.negate();
+
+      // Start the arrow half its length behind the centre so it straddles the edge
+      const origin = centre.clone().addScaledVector(dir, -ARROW_LEN * 0.5);
+
+      const arrow = new THREE.ArrowHelper(dir, origin, ARROW_LEN, color, ARROW_HEAD_L, ARROW_HEAD_W);
+      group.add(arrow);
+    }
+
+    group.visible = false;
+    scene.add(group);
+    return group;
+  }
+
+  // Build all 12 groups and key them by button data-m attribute
+  const arrowGroups = {};
+  for (const [name, mv] of Object.entries(MOVES)) {
+    arrowGroups[name]        = buildArrowGroup(mv.fi, true);
+    arrowGroups[name + "'"]  = buildArrowGroup(mv.fi, false);
+  }
+
+  // --- Preview state management ---
+  let previewFace   = -1;   // fi currently highlighted, or -1
+  let previewArrows = null; // visible arrow group, or null
+
+  function showPreview(moveName) {
+    const fi = MOVES[moveName.replace("'", '')].fi;
+    // Highlight the face
+    if (previewFace !== fi) {
+      if (previewFace >= 0) faceHighlights[previewFace].material.opacity = 0;
+      faceHighlights[fi].material.opacity = 0.22;
+      previewFace = fi;
+    }
+    // Show arrows for this exact move (CW or CCW)
+    if (previewArrows) previewArrows.visible = false;
+    previewArrows = arrowGroups[moveName];
+    if (previewArrows) previewArrows.visible = true;
+  }
+
+  function clearPreview() {
+    if (previewFace >= 0) { faceHighlights[previewFace].material.opacity = 0; previewFace = -1; }
+    if (previewArrows)    { previewArrows.visible = false; previewArrows = null; }
+  }
+
+  // ════════════════════════════════════════════════════════════
+  //  MARK TEXTURES
+  // ════════════════════════════════════════════════════════════
+  function makeMarkTex(mark) {
+    const cv = document.createElement('canvas');
+    cv.width = cv.height = 128;
+    const ctx = cv.getContext('2d');
+    ctx.fillStyle = '#f2f2f2';
+    ctx.fillRect(0, 0, 128, 128);
+    ctx.lineCap = 'round';
+    if (mark === 'X') {
+      ctx.strokeStyle = '#cc1111';
+      ctx.lineWidth = 17;
+      ctx.beginPath();
+      ctx.moveTo(26, 26); ctx.lineTo(102, 102);
+      ctx.moveTo(102, 26); ctx.lineTo(26, 102);
+      ctx.stroke();
+    } else {
+      ctx.strokeStyle = '#1133cc';
+      ctx.lineWidth = 15;
+      ctx.beginPath();
+      ctx.arc(64, 64, 40, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    return new THREE.CanvasTexture(cv);
+  }
+  const MARK_TEX = { X: makeMarkTex('X'), O: makeMarkTex('O') };
+
+  function applyMark(mesh, mark) {
+    if (mark) {
+      mesh.material.map   = MARK_TEX[mark];
+      mesh.material.color.setHex(0xffffff);
+    } else {
+      mesh.material.map   = null;
+      mesh.material.color.setHex(0xf2f2f2);
+    }
+    mesh.material.needsUpdate = true;
+  }
+
+  // ════════════════════════════════════════════════════════════
+  //  GAME STATE
+  // ════════════════════════════════════════════════════════════
+  let gstate    = 'PLACE';
+  let player    = 'X';
+  let animating = false;
+  let aiEnabled = false;
+  let hovered   = null;
+  let mdPos     = { x:0, y:0 };
+
+  const $status  = document.getElementById('status');
+  const $btns    = document.getElementById('move-btns');
+  const $overlay = document.getElementById('overlay');
+  const $result  = document.getElementById('result');
+  const $bx      = document.getElementById('bx');
+  const $bo      = document.getElementById('bo');
+  const allBtns  = [...document.querySelectorAll('.mbtn')];
+
+  document.getElementById('ai-toggle').addEventListener('change', e => {
+    aiEnabled = e.target.checked;
+  });
+
+  function updateBadges() {
+    $bx.classList.toggle('active', player==='X' && gstate!=='OVER');
+    $bo.classList.toggle('active', player==='O' && gstate!=='OVER');
+  }
+
+  function goPlace() {
+    gstate = 'PLACE';
+    $btns.style.display = 'none';
+    clearPreview();
+    updateBadges();
+    if (aiEnabled && player === 'O') {
+      $status.textContent = `AI (○) is thinking…`;
+      setTimeout(aiDoPlace, 650);
+    } else {
+      $status.textContent = `Player ${player==='X' ? '1 (✕)' : '2 (○)'} — click any empty white sticker`;
+    }
+  }
+
+  function goRotate() {
+    gstate = 'ROTATE';
+    if (aiEnabled && player === 'O') {
+      $status.textContent = `AI (○) is choosing a rotation…`;
+      // buttons stay hidden; AI rotates automatically after a short pause
+      setTimeout(aiDoRotate, 700);
+    } else {
+      $btns.style.display = 'flex';
+      allBtns.forEach(b => b.disabled = false);
+      $status.textContent = `Player ${player==='X' ? '1 (✕)' : '2 (○)'} — choose a face rotation`;
+    }
+  }
+
+  function goOver(winner) {
+    gstate = 'OVER';
+    $btns.style.display = 'none';
+    clearPreview();
+    updateBadges();
+    $overlay.classList.add('show');
+    if (!winner) {
+      $result.textContent = 'Draw!';
+      $result.className   = 'dr';
+    } else {
+      $result.textContent = `Player ${winner==='X' ? '1 (✕)' : '2 (○)'} wins!`;
+      $result.className   = winner==='X' ? 'xw' : 'ow';
+    }
+  }
+
+  // ════════════════════════════════════════════════════════════
+  //  WIN CHECK
+  // ════════════════════════════════════════════════════════════
+  function checkWin() {
+    for (let fi = 0; fi < 6; fi++) {
+      const face = stickers.slice(fi*9, fi*9+9).map(s => s.mark);
+      for (const [a,b,cc] of WIN_LINES)
+        if (face[a] && face[a]===face[b] && face[b]===face[cc]) return face[a];
+    }
+    if (stickers.every(s => s.mark)) return null;
+    return undefined;
+  }
+
+  function endTurn() {
+    const w = checkWin();
+    if (w !== undefined) { goOver(w); return; }
+    player = player==='X' ? 'O' : 'X';
+    goPlace();
+  }
+
+  // ════════════════════════════════════════════════════════════
+  //  LOGICAL STATE UPDATE AFTER ROTATION
+  // ════════════════════════════════════════════════════════════
+  function rotateFace(fi, cw) {
+    const base = fi * 9;
+    const perm = cw ? CW_PERM : CCW_PERM;
+    const snap = stickers.slice(base, base+9).map(s => ({ mark:s.mark, mesh:s.mesh }));
+    perm.forEach((src, dst) => {
+      stickers[base+dst].mark = snap[src].mark;
+      stickers[base+dst].mesh = snap[src].mesh;
+      if (snap[src].mesh) snap[src].mesh.userData.si = base + dst;
+    });
+  }
+
+  function cycleStrips(strips, cw) {
+    const snap = strips.map(st => st.map(i => ({ mark:stickers[i].mark, mesh:stickers[i].mesh })));
+    for (let s = 0; s < 4; s++) {
+      const to = cw ? (s+1)%4 : (s+3)%4;
+      strips[to].forEach((idx, j) => {
+        stickers[idx].mark = snap[s][j].mark;
+        stickers[idx].mesh = snap[s][j].mesh;
+        if (snap[s][j].mesh) snap[s][j].mesh.userData.si = idx;
+      });
+    }
+  }
+
+  // ════════════════════════════════════════════════════════════
+  //  CUBIE GRID-COORD UPDATE AFTER ROTATION
+  // ════════════════════════════════════════════════════════════
+  function updateCoord(cubie, fi, cw) {
+    let {gx,gy,gz} = cubie.userData;
+    let cx=gx-1, cy=gy-1, cz=gz-1;
+    let nx=cx, ny=cy, nz=cz;
+    if (cw) {
+      if      (fi===F) { nx= cy; ny=-cx; }
+      else if (fi===B) { nx=-cy; ny= cx; }
+      else if (fi===L) { ny=-cz; nz= cy; }
+      else if (fi===R) { ny= cz; nz=-cy; }
+      else if (fi===U) { nx= cz; nz=-cx; }
+      else             { nx=-cz; nz= cx; }
+    } else {
+      if      (fi===F) { nx=-cy; ny= cx; }
+      else if (fi===B) { nx= cy; ny=-cx; }
+      else if (fi===L) { ny= cz; nz=-cy; }
+      else if (fi===R) { ny=-cz; nz= cy; }
+      else if (fi===U) { nx=-cz; nz= cx; }
+      else             { nx= cz; nz=-cx; }
+    }
+    cubie.userData.gx = nx+1; cubie.userData.gy = ny+1; cubie.userData.gz = nz+1;
+  }
+
+  // ════════════════════════════════════════════════════════════
+  //  FACE ROTATION ANIMATION
+  // ════════════════════════════════════════════════════════════
+  let anim = null;
+
+  function startRotation(name, cw, onDone) {
+    if (animating) return;
+    animating = true;
+    controls.enabled = false;
+    clearPreview();
+
+    const mv = MOVES[name];
+    const fi = mv.fi;
+    const prop = 'g' + FACE_AXIS[fi];
+    const val  = FACE_VAL[fi];
+    const faceCubies = cubieGroup.children.filter(c => c.userData[prop] === val);
+
+    const pivot = new THREE.Group();
+    scene.add(pivot);
+    faceCubies.forEach(c => pivot.attach(c));
+
+    const angle = cw ? CW_ANGLE[fi] : -CW_ANGLE[fi];
+    const endQ  = new THREE.Quaternion().setFromAxisAngle(ROT_AXIS[fi], angle);
+
+    anim = {
+      pivot,
+      startQ: new THREE.Quaternion(),
+      endQ,
+      fi, cw,
+      strips: mv.s,
+      startT: performance.now(),
+      dur: 320,
+      onDone,
+    };
+  }
+
+  function finishAnim() {
+    const { pivot, endQ, fi, cw, strips, onDone } = anim;
+    pivot.quaternion.copy(endQ);
+
+    [...pivot.children].forEach(cubie => {
+      cubieGroup.attach(cubie);
+      cubie.position.x = Math.round(cubie.position.x);
+      cubie.position.y = Math.round(cubie.position.y);
+      cubie.position.z = Math.round(cubie.position.z);
+      updateCoord(cubie, fi, cw);
+    });
+    scene.remove(pivot);
+
+    rotateFace(fi, cw);
+    cycleStrips(strips, cw);
+
+    anim = null;
+    animating = false;
+    controls.enabled = true;
+    onDone();
+  }
+
+  // ════════════════════════════════════════════════════════════
+  //  AI OPPONENT
+  // ════════════════════════════════════════════════════════════
+
+  function shuffle(arr) {
+    const a = [...arr];
+    for (let i = a.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [a[i], a[j]] = [a[j], a[i]];
+    }
+    return a;
+  }
+
+  const ALL_MOVE_NAMES = [
+    ...Object.keys(MOVES),
+    ...Object.keys(MOVES).map(k => k + "'"),
+  ];
+
+  // Simulate a rotation on a flat marks array (no Three.js involvement)
+  function simulateRotation(marks, moveName) {
+    const cw   = !moveName.endsWith("'");
+    const nm   = moveName.replace("'", '');
+    const mv   = MOVES[nm];
+    const fi   = mv.fi;
+    const result = [...marks];
+
+    // Rotate the face's 9 stickers
+    const base = fi * 9;
+    const perm = cw ? CW_PERM : CCW_PERM;
+    const faceSnap = marks.slice(base, base + 9);
+    perm.forEach((src, dst) => { result[base + dst] = faceSnap[src]; });
+
+    // Cycle the 4 adjacent edge strips
+    const strips = mv.s;
+    const snap   = strips.map(st => st.map(i => marks[i]));
+    for (let s = 0; s < 4; s++) {
+      const to = cw ? (s + 1) % 4 : (s + 3) % 4;
+      strips[to].forEach((idx, j) => { result[idx] = snap[s][j]; });
+    }
+    return result;
+  }
+
+  // Return the winner mark ('X'|'O') if any face has a 3-in-a-row, else null
+  function marksWinner(marks) {
+    for (let fi = 0; fi < 6; fi++) {
+      for (const [a, b, c] of WIN_LINES) {
+        const m = marks[fi * 9 + a];
+        if (m && m === marks[fi * 9 + b] && m === marks[fi * 9 + c]) return m;
+      }
+    }
+    return null;
+  }
+
+  // Count lines where `player` has 2 stickers and the 3rd is empty (threats)
+  function countThreats(marks, player) {
+    let n = 0;
+    for (let fi = 0; fi < 6; fi++) {
+      for (const [a, b, c] of WIN_LINES) {
+        const vals = [marks[fi*9+a], marks[fi*9+b], marks[fi*9+c]];
+        if (vals.filter(v => v === player).length === 2 &&
+            vals.filter(v => v === null).length   === 1) n++;
+      }
+    }
+    return n;
+  }
+
+  // Pick which empty sticker index the AI should mark
+  function aiChooseSticker() {
+    const marks = stickers.map(s => s.mark);
+    const empty = marks.map((m, i) => m === null ? i : -1).filter(i => i >= 0);
+
+    // 1. Win: O already has 2 on a line — complete it
+    for (const fi of shuffle([0,1,2,3,4,5])) {
+      for (const line of shuffle([...WIN_LINES])) {
+        const indices = line.map(j => fi * 9 + j);
+        const vals    = indices.map(i => marks[i]);
+        if (vals.filter(v => v === 'O').length === 2 &&
+            vals.filter(v => v === null).length  === 1)
+          return indices[vals.indexOf(null)];
+      }
+    }
+
+    // 2. Block: X has 2 on a line — deny the third
+    for (const fi of shuffle([0,1,2,3,4,5])) {
+      for (const line of shuffle([...WIN_LINES])) {
+        const indices = line.map(j => fi * 9 + j);
+        const vals    = indices.map(i => marks[i]);
+        if (vals.filter(v => v === 'X').length === 2 &&
+            vals.filter(v => v === null).length  === 1)
+          return indices[vals.indexOf(null)];
+      }
+    }
+
+    // 3. Prefer the centre sticker of a face (best hub for future lines)
+    const centers = shuffle([0,1,2,3,4,5])
+      .map(fi => fi * 9 + 4)
+      .filter(i => marks[i] === null);
+    if (centers.length) return centers[0];
+
+    // 4. Random empty sticker
+    return shuffle(empty)[0];
+  }
+
+  // Pick which rotation the AI should execute
+  function aiChooseRotation() {
+    const marks = stickers.map(s => s.mark);
+    const moves = shuffle(ALL_MOVE_NAMES);
+
+    // 1. Immediate win
+    for (const mv of moves) {
+      if (marksWinner(simulateRotation(marks, mv)) === 'O') return mv;
+    }
+
+    // 2. Avoid handing X a win; among safe moves pick the one that
+    //    maximises O threats and minimises X threats
+    let best = null, bestScore = -Infinity;
+    for (const mv of moves) {
+      const result = simulateRotation(marks, mv);
+      if (marksWinner(result) === 'X') continue;
+      const score = countThreats(result, 'O') - countThreats(result, 'X') * 2;
+      if (score > bestScore) { bestScore = score; best = mv; }
+    }
+    if (best) return best;
+
+    // 3. All moves give X a win — pick the one that minimises X's threats (damage control)
+    let leastBad = moves[0], leastT = Infinity;
+    for (const mv of moves) {
+      const t = countThreats(simulateRotation(marks, mv), 'X');
+      if (t < leastT) { leastT = t; leastBad = mv; }
+    }
+    return leastBad;
+  }
+
+  // Called automatically when it's AI's PLACE phase
+  function aiDoPlace() {
+    if (gstate !== 'PLACE' || player !== 'O' || !aiEnabled) return;
+    const si = aiChooseSticker();
+    stickers[si].mark = 'O';
+    applyMark(stickers[si].mesh, 'O');
+    goRotate();   // transitions to ROTATE, which schedules aiDoRotate
+  }
+
+  // Called automatically when it's AI's ROTATE phase
+  function aiDoRotate() {
+    if (gstate !== 'ROTATE' || player !== 'O' || !aiEnabled) return;
+    const moveName = aiChooseRotation();
+    const cw = !moveName.endsWith("'");
+    const nm = moveName.replace("'", '');
+    $status.textContent = `AI (○) plays ${moveName}…`;
+    startRotation(nm, cw, endTurn);
+  }
+
+  // ════════════════════════════════════════════════════════════
+  //  RAYCASTING
+  // ════════════════════════════════════════════════════════════
+  const ray   = new THREE.Raycaster();
+  const mouse = new THREE.Vector2();
+
+  function castRay(e) {
+    const rect = renderer.domElement.getBoundingClientRect();
+    mouse.x =  ((e.clientX - rect.left) / rect.width ) * 2 - 1;
+    mouse.y = -((e.clientY - rect.top ) / rect.height) * 2 + 1;
+    ray.setFromCamera(mouse, camera);
+    const hits = ray.intersectObjects(stickerMeshes);
+    return hits.length ? hits[0].object : null;
+  }
+
+  // ════════════════════════════════════════════════════════════
+  //  INPUT HANDLING
+  // ════════════════════════════════════════════════════════════
+  renderer.domElement.addEventListener('mousedown', e => { mdPos = { x:e.clientX, y:e.clientY }; });
+
+  renderer.domElement.addEventListener('click', e => {
+    if (animating || gstate !== 'PLACE' || (aiEnabled && player === 'O')) return;
+    const dx = e.clientX - mdPos.x, dy = e.clientY - mdPos.y;
+    if (dx*dx + dy*dy > 25) return;
+
+    const mesh = castRay(e);
+    if (!mesh) return;
+    const si = mesh.userData.si;
+    if (stickers[si].mark) return;
+
+    stickers[si].mark = player;
+    applyMark(mesh, player);
+    if (hovered === mesh) hovered = null;
+    goRotate();
+  });
+
+  renderer.domElement.addEventListener('mousemove', e => {
+    if (gstate !== 'PLACE' || animating || (aiEnabled && player === 'O')) {
+      if (hovered) {
+        if (!stickers[hovered.userData.si].mark) hovered.material.color.setHex(0xf2f2f2);
+        hovered = null;
+      }
+      return;
+    }
+    const mesh = castRay(e);
+    if (mesh === hovered) return;
+    if (hovered && !stickers[hovered.userData.si].mark) hovered.material.color.setHex(0xf2f2f2);
+    hovered = mesh;
+    if (hovered && !stickers[hovered.userData.si].mark) hovered.material.color.setHex(0xffee44);
+  });
+
+  // Move buttons — click to execute, hover to preview layer + direction
+  $btns.addEventListener('click', e => {
+    if (gstate !== 'ROTATE' || animating) return;
+    const btn = e.target.closest('.mbtn');
+    if (!btn || btn.disabled) return;
+
+    const mv = btn.dataset.m;
+    const cw = !mv.endsWith("'");
+    const nm = mv.replace("'", '');
+
+    allBtns.forEach(b => b.disabled = true);
+    startRotation(nm, cw, () => {
+      allBtns.forEach(b => b.disabled = false);
+      endTurn();
+    });
+  });
+
+  // Button hover → show face highlight and rotation arrows
+  allBtns.forEach(btn => {
+    btn.addEventListener('mouseenter', () => {
+      if (gstate !== 'ROTATE' || animating) return;
+      showPreview(btn.dataset.m);
+    });
+    btn.addEventListener('mouseleave', () => {
+      clearPreview();
+    });
+  });
+
+  // Play Again
+  document.getElementById('play-again').addEventListener('click', () => {
+    $overlay.classList.remove('show');
+    hovered = null;
+    player  = 'X';
+    buildCube();
+    goPlace();
+  });
+
+  // ════════════════════════════════════════════════════════════
+  //  RESIZE
+  // ════════════════════════════════════════════════════════════
+  function onResize() {
+    const w = innerWidth, h = innerHeight;
+    renderer.setSize(w, h);
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+  }
+  window.addEventListener('resize', onResize);
+  onResize();
+
+  // ════════════════════════════════════════════════════════════
+  //  MAIN RENDER LOOP
+  // ════════════════════════════════════════════════════════════
+  function loop() {
+    requestAnimationFrame(loop);
+
+    if (anim) {
+      const t = Math.min((performance.now() - anim.startT) / anim.dur, 1);
+      const e = t < .5 ? 2*t*t : 1 - (-2*t+2)**2/2;
+      anim.pivot.quaternion.slerpQuaternions(anim.startQ, anim.endQ, e);
+      if (t >= 1) finishAnim();
+    }
+
+    if (!animating) controls.update();
+    renderer.render(scene, camera);
+  }
+
+  goPlace();
+  loop();
+  </script>
+</body>
+</html>
