@@ -1,0 +1,655 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Futurepedia | Links</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      width: 100%; height: 100%;
+      overflow: hidden;
+      background: radial-gradient(ellipse at 50% 45%, #0d1433 0%, #09091a 65%);
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    }
+
+    #neural-canvas {
+      position: fixed; top: 0; left: 0;
+      width: 100%; height: 100%;
+      display: block;
+      z-index: 0;
+    }
+
+    #node-container {
+      position: fixed; top: 0; left: 0;
+      width: 100%; height: 100%;
+      z-index: 10;
+      pointer-events: none;
+    }
+
+    .node {
+      position: absolute;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      border-radius: 50%;
+      cursor: pointer;
+      text-decoration: none;
+      color: #fff;
+      transform: translate(-50%, -50%);
+      transition: transform 0.28s cubic-bezier(0.34, 1.56, 0.64, 1),
+                  box-shadow 0.25s ease,
+                  border-color 0.25s ease,
+                  background-color 0.25s ease;
+      user-select: none;
+      pointer-events: all;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    .node--outer {
+      width: 90px; height: 90px;
+      background: rgba(4, 6, 28, 0.72);
+      border: 1.5px solid;
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
+    }
+
+    .node--outer:hover, .node--outer:focus-visible {
+      transform: translate(-50%, -50%) scale(1.18);
+    }
+
+    .node--center {
+      width: 140px; height: 140px;
+      background: rgba(4, 10, 42, 0.82);
+      border: 2px solid rgba(0, 220, 255, 0.55);
+      box-shadow:
+        0 0 32px rgba(0, 220, 255, 0.28),
+        0 0 70px rgba(0, 220, 255, 0.1),
+        inset 0 0 22px rgba(0, 220, 255, 0.07);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      animation: center-breathe 3.5s ease-in-out infinite;
+    }
+
+    .node--center:hover, .node--center:focus-visible {
+      transform: translate(-50%, -50%) scale(1.07);
+      animation: none;
+      box-shadow:
+        0 0 55px rgba(0, 220, 255, 0.55),
+        0 0 110px rgba(0, 220, 255, 0.22),
+        inset 0 0 28px rgba(0, 220, 255, 0.12);
+    }
+
+    @keyframes center-breathe {
+      0%, 100% { box-shadow: 0 0 32px rgba(0,220,255,.28), 0 0 70px rgba(0,220,255,.1), inset 0 0 22px rgba(0,220,255,.07); }
+      50%       { box-shadow: 0 0 50px rgba(0,220,255,.45), 0 0 90px rgba(0,220,255,.17), inset 0 0 28px rgba(0,220,255,.11); }
+    }
+
+    .node:focus-visible { outline: none; }
+
+    /* Spinning arc ring */
+    .node::after {
+      content: '';
+      position: absolute;
+      inset: -6px;
+      border-radius: 50%;
+      border: 2px solid transparent;
+      border-top-color: var(--node-accent, rgba(0, 220, 255, 0.55));
+      animation: ring-spin 3.2s linear infinite;
+      opacity: 0.55;
+      transition: opacity 0.25s ease;
+    }
+
+    .node:hover::after, .node:focus-visible::after {
+      animation-duration: 0.95s;
+      opacity: 1;
+    }
+
+    .node--center::after {
+      inset: -8px;
+      border-width: 2.5px;
+      opacity: 0.75;
+    }
+
+    .node--center:hover::after {
+      animation-duration: 0.75s;
+    }
+
+    /* Second counter-rotating arc */
+    .node::before {
+      content: '';
+      position: absolute;
+      inset: -10px;
+      border-radius: 50%;
+      border: 1.5px solid transparent;
+      border-bottom-color: var(--node-accent, rgba(0, 220, 255, 0.25));
+      animation: ring-spin-rev 5s linear infinite;
+      opacity: 0.25;
+      transition: opacity 0.25s ease;
+    }
+
+    .node:hover::before, .node:focus-visible::before {
+      opacity: 0.5;
+      animation-duration: 1.8s;
+    }
+
+    @keyframes ring-spin     { to { transform: rotate(360deg); } }
+    @keyframes ring-spin-rev { to { transform: rotate(-360deg); } }
+
+    .node__icon {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--node-accent, #00dcff);
+      flex-shrink: 0;
+    }
+
+    .node--outer .node__icon  { width: 26px; height: 26px; }
+    .node--center .node__icon { width: 38px; height: 38px; }
+
+    .node__label {
+      font-size: clamp(7.5px, 1.7vw, 9.5px);
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: rgba(255, 255, 255, 0.82);
+      margin-top: 5px;
+      text-align: center;
+      line-height: 1.25;
+      max-width: 78px;
+    }
+
+    .node--center .node__label {
+      font-size: clamp(9px, 2vw, 12px);
+      margin-top: 6px;
+      color: #fff;
+      letter-spacing: 0.14em;
+      max-width: 110px;
+    }
+
+    .node__sub {
+      font-size: clamp(6px, 1.2vw, 7.5px);
+      color: rgba(255, 255, 255, 0.38);
+      letter-spacing: 0.07em;
+      text-align: center;
+      margin-top: 2px;
+    }
+
+    #tagline {
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: clamp(8px, 1.3vw, 10px);
+      color: rgba(255, 255, 255, 0.18);
+      letter-spacing: 0.22em;
+      text-transform: uppercase;
+      z-index: 10;
+      white-space: nowrap;
+    }
+  </style>
+</head>
+<body>
+
+<canvas id="neural-canvas" aria-hidden="true"></canvas>
+<div id="node-container"></div>
+<p id="tagline">Explore the Future of AI</p>
+
+<script>
+// ─── Node Data ────────────────────────────────────────────────────────────────
+
+const CENTER = {
+  id: 'center', label: 'Futurepedia', sublabel: 'AI Tools Directory',
+  href: '#', accentColor: '#00dcff'
+};
+
+const OUTER = [
+  { id: 'youtube',    label: 'YouTube',      href: '#', accentColor: '#ff4444' },
+  { id: 'website',    label: 'Website',       href: '#', accentColor: '#00dcff' },
+  { id: 'newsletter', label: 'Newsletter',    href: '#', accentColor: '#a78bfa' },
+  { id: 'instagram',  label: 'Instagram',     href: '#', accentColor: '#f472b6' },
+  { id: 'twitter',    label: 'Twitter / X',   href: '#', accentColor: '#d1d5db' },
+  { id: 'skillleap',  label: 'Skill Leap AI', href: '#', accentColor: '#fbbf24' },
+];
+
+// ─── SVG Icons ────────────────────────────────────────────────────────────────
+
+const ICONS = {
+  center: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="12" cy="4.5" r="1.6" fill="currentColor" stroke="none"/>
+    <circle cx="19.5" cy="8.5" r="1.6" fill="currentColor" stroke="none"/>
+    <circle cx="19.5" cy="15.5" r="1.6" fill="currentColor" stroke="none"/>
+    <circle cx="12" cy="19.5" r="1.6" fill="currentColor" stroke="none"/>
+    <circle cx="4.5" cy="15.5" r="1.6" fill="currentColor" stroke="none"/>
+    <circle cx="4.5" cy="8.5" r="1.6" fill="currentColor" stroke="none"/>
+    <circle cx="12" cy="12" r="2.2" fill="currentColor" stroke="none"/>
+    <line x1="12" y1="4.5" x2="12" y2="12"/>
+    <line x1="19.5" y1="8.5" x2="12" y2="12"/>
+    <line x1="19.5" y1="15.5" x2="12" y2="12"/>
+    <line x1="12" y1="19.5" x2="12" y2="12"/>
+    <line x1="4.5" y1="15.5" x2="12" y2="12"/>
+    <line x1="4.5" y1="8.5" x2="12" y2="12"/>
+    <line x1="12" y1="4.5" x2="19.5" y2="8.5"/>
+    <line x1="19.5" y1="8.5" x2="19.5" y2="15.5"/>
+    <line x1="19.5" y1="15.5" x2="12" y2="19.5"/>
+    <line x1="12" y1="19.5" x2="4.5" y2="15.5"/>
+    <line x1="4.5" y1="15.5" x2="4.5" y2="8.5"/>
+    <line x1="4.5" y1="8.5" x2="12" y2="4.5"/>
+  </svg>`,
+
+  youtube: `<svg viewBox="0 0 24 24" fill="currentColor">
+    <path d="M22.54 6.42a2.78 2.78 0 0 0-1.95-1.96C18.88 4 12 4 12 4s-6.88 0-8.59.46A2.78 2.78 0 0 0 1.46 6.42 29 29 0 0 0 1 12a29 29 0 0 0 .46 5.58 2.78 2.78 0 0 0 1.95 1.96C5.12 20 12 20 12 20s6.88 0 8.59-.46a2.78 2.78 0 0 0 1.95-1.96A29 29 0 0 0 23 12a29 29 0 0 0-.46-5.58zM9.75 15.02V8.98L15.5 12l-5.75 3.02z"/>
+  </svg>`,
+
+  website: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="12" cy="12" r="10"/>
+    <line x1="2" y1="12" x2="22" y2="12"/>
+    <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+  </svg>`,
+
+  newsletter: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="2" y="5" width="20" height="14" rx="2"/>
+    <polyline points="2,5 12,13 22,5"/>
+  </svg>`,
+
+  instagram: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="2" y="2" width="20" height="20" rx="5.5"/>
+    <circle cx="12" cy="12" r="5"/>
+    <circle cx="17.4" cy="6.6" r="1.2" fill="currentColor" stroke="none"/>
+  </svg>`,
+
+  twitter: `<svg viewBox="0 0 24 24" fill="currentColor">
+    <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+  </svg>`,
+
+  skillleap: `<svg viewBox="0 0 24 24" fill="currentColor">
+    <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+  </svg>`,
+};
+
+// ─── Utility ──────────────────────────────────────────────────────────────────
+
+function hexToRgb(hex) {
+  const v = parseInt(hex.replace('#',''), 16);
+  return { r: (v >> 16) & 255, g: (v >> 8) & 255, b: v & 255 };
+}
+
+function rgba(hex, a) {
+  const { r, g, b } = hexToRgb(hex);
+  return `rgba(${r},${g},${b},${a})`;
+}
+
+// ─── Canvas ───────────────────────────────────────────────────────────────────
+
+const canvas = document.getElementById('neural-canvas');
+const ctx = canvas.getContext('2d');
+let W = 0, H = 0, dpr = 1;
+
+function resizeCanvas() {
+  dpr = window.devicePixelRatio || 1;
+  W = window.innerWidth;
+  H = window.innerHeight;
+  canvas.width  = Math.round(W * dpr);
+  canvas.height = Math.round(H * dpr);
+  canvas.style.width  = W + 'px';
+  canvas.style.height = H + 'px';
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  updateLayout();
+}
+
+// ─── Layout ───────────────────────────────────────────────────────────────────
+
+let layout = { cx: 0, cy: 0, radius: 200, centerSize: 140, outerSize: 90 };
+
+function updateLayout() {
+  const isMobile = W < 520;
+  const outerSize = isMobile ? 72 : 90;
+  const centerSize = isMobile ? 108 : 140;
+  const minDim = Math.min(W, H);
+
+  // Base orbit radius
+  let radius = minDim * (isMobile ? 0.33 : 0.365);
+
+  // Prevent adjacent node overlap
+  const minOrbit = (outerSize * 1.15) / (2 * Math.sin(Math.PI / OUTER.length));
+  radius = Math.max(radius, minOrbit);
+
+  // Ensure vertical clearance so nodes don't clip viewport edges
+  const cx = W / 2, cy = H / 2;
+  const clearance = outerSize * 0.65;
+  const maxR = Math.min(cx - clearance, cy - clearance, W - cx - clearance, H - cy - clearance);
+  radius = Math.min(radius, maxR);
+
+  layout = { cx, cy, radius, centerSize, outerSize };
+}
+
+function nodePos(id) {
+  const { cx, cy, radius } = layout;
+  if (id === 'center') return { x: cx, y: cy };
+  const i = OUTER.findIndex(n => n.id === id);
+  const angle = (i / OUTER.length) * Math.PI * 2 - Math.PI / 2;
+  return { x: cx + radius * Math.cos(angle), y: cy + radius * Math.sin(angle) };
+}
+
+// ─── DOM Nodes ────────────────────────────────────────────────────────────────
+
+const nodeEls = {};
+const hovered = new Set();
+
+function buildNodes() {
+  const container = document.getElementById('node-container');
+  container.innerHTML = '';
+
+  [CENTER, ...OUTER].forEach(data => {
+    const isCenter = data.id === 'center';
+    const el = document.createElement('a');
+    el.href = data.href;
+    el.target = '_blank';
+    el.rel = 'noopener noreferrer';
+    el.className = 'node node--' + (isCenter ? 'center' : 'outer');
+    el.setAttribute('aria-label', data.label + (data.sublabel ? ` – ${data.sublabel}` : ''));
+    el.style.setProperty('--node-accent', data.accentColor);
+
+    if (!isCenter) {
+      el.style.borderColor = rgba(data.accentColor, 0.32);
+      el.style.boxShadow = `0 0 14px ${rgba(data.accentColor, 0.14)}, inset 0 0 10px ${rgba(data.accentColor, 0.04)}`;
+    }
+
+    const icon = document.createElement('div');
+    icon.className = 'node__icon';
+    icon.innerHTML = ICONS[data.id] || ICONS.website;
+    el.appendChild(icon);
+
+    const lbl = document.createElement('span');
+    lbl.className = 'node__label';
+    lbl.textContent = data.label;
+    el.appendChild(lbl);
+
+    if (data.sublabel) {
+      const sub = document.createElement('span');
+      sub.className = 'node__sub';
+      sub.textContent = data.sublabel;
+      el.appendChild(sub);
+    }
+
+    const onEnter = () => {
+      hovered.add(data.id);
+      if (!isCenter) {
+        el.style.borderColor = rgba(data.accentColor, 0.88);
+        el.style.boxShadow = `0 0 28px ${rgba(data.accentColor, 0.48)}, 0 0 55px ${rgba(data.accentColor, 0.18)}, inset 0 0 14px ${rgba(data.accentColor, 0.09)}`;
+      }
+    };
+    const onLeave = () => {
+      hovered.delete(data.id);
+      if (!isCenter) {
+        el.style.borderColor = rgba(data.accentColor, 0.32);
+        el.style.boxShadow = `0 0 14px ${rgba(data.accentColor, 0.14)}, inset 0 0 10px ${rgba(data.accentColor, 0.04)}`;
+      }
+    };
+
+    el.addEventListener('mouseenter', onEnter);
+    el.addEventListener('mouseleave', onLeave);
+    el.addEventListener('focus',      onEnter);
+    el.addEventListener('blur',       onLeave);
+    el.addEventListener('touchstart', onEnter, { passive: true });
+    el.addEventListener('touchend',   () => setTimeout(onLeave, 320));
+
+    container.appendChild(el);
+    nodeEls[data.id] = el;
+  });
+}
+
+function positionNodes() {
+  const { cx, cy, radius, centerSize, outerSize } = layout;
+
+  const ce = nodeEls['center'];
+  ce.style.left   = cx + 'px';
+  ce.style.top    = cy + 'px';
+  ce.style.width  = centerSize + 'px';
+  ce.style.height = centerSize + 'px';
+
+  OUTER.forEach((data, i) => {
+    const angle = (i / OUTER.length) * Math.PI * 2 - Math.PI / 2;
+    const el = nodeEls[data.id];
+    el.style.left   = (cx + radius * Math.cos(angle)) + 'px';
+    el.style.top    = (cy + radius * Math.sin(angle))  + 'px';
+    el.style.width  = outerSize + 'px';
+    el.style.height = outerSize + 'px';
+  });
+}
+
+// ─── Connections ──────────────────────────────────────────────────────────────
+
+// center→outer (6) + ring (6)
+const CONNECTIONS = [
+  ...OUTER.map(n => ({ id: `c-${n.id}`, from: 'center', to: n.id, color: n.accentColor, ring: false })),
+  ...OUTER.map((n, i) => {
+    const m = OUTER[(i + 1) % OUTER.length];
+    return { id: `r-${n.id}-${m.id}`, from: n.id, to: m.id, color: '#00b4d8', ring: true };
+  }),
+];
+
+const hs = {}; // hoverStrength per connection, 0..1
+CONNECTIONS.forEach(c => { hs[c.id] = 0; });
+
+function updateHover() {
+  CONNECTIONS.forEach(c => {
+    const target = (hovered.has(c.from) || hovered.has(c.to)) ? 1 : 0;
+    hs[c.id] += (target - hs[c.id]) * 0.07;
+  });
+}
+
+function drawConnections() {
+  CONNECTIONS.forEach(c => {
+    const f = nodePos(c.from);
+    const t = nodePos(c.to);
+    const h = hs[c.id];
+    const baseA = c.ring ? 0.12 : 0.22;
+    const alpha  = baseA + h * (c.ring ? 0.38 : 0.52);
+
+    // Gradient: center color → node accent color
+    const grad = ctx.createLinearGradient(f.x, f.y, t.x, t.y);
+    if (c.ring) {
+      grad.addColorStop(0, rgba(c.color, alpha));
+      grad.addColorStop(1, rgba(c.color, alpha * 0.6));
+    } else {
+      grad.addColorStop(0, rgba('#00dcff', alpha * 0.8));
+      grad.addColorStop(1, rgba(c.color, alpha));
+    }
+
+    // Bloom pass
+    ctx.save();
+    ctx.shadowColor = rgba(c.color, 0.28 + h * 0.38);
+    ctx.shadowBlur  = 10 + h * 18;
+    ctx.beginPath();
+    ctx.moveTo(f.x, f.y);
+    ctx.lineTo(t.x, t.y);
+    ctx.strokeStyle = rgba(c.color, (c.ring ? 0.08 : 0.14) + h * 0.18);
+    ctx.lineWidth = 4;
+    ctx.stroke();
+    ctx.restore();
+
+    // Core line
+    ctx.save();
+    ctx.shadowColor = rgba(c.color, 0.15 + h * 0.25);
+    ctx.shadowBlur  = 4 + h * 8;
+    ctx.beginPath();
+    ctx.moveTo(f.x, f.y);
+    ctx.lineTo(t.x, t.y);
+    ctx.strokeStyle = grad;
+    ctx.lineWidth = c.ring ? 0.75 : 1;
+    ctx.stroke();
+    ctx.restore();
+  });
+}
+
+// ─── Pulses ───────────────────────────────────────────────────────────────────
+
+const PULSES = [];
+
+function buildPulses() {
+  CONNECTIONS.forEach((c, i) => {
+    const count = c.ring ? 1 : 2;
+    for (let p = 0; p < count; p++) {
+      PULSES.push({
+        conn: c,
+        t: ((i / CONNECTIONS.length) + (p / count)) % 1,
+        baseSpeed: c.ring ? 0.0025 : 0.0038 + Math.random() * 0.0015,
+      });
+    }
+  });
+}
+
+function updatePulses() {
+  PULSES.forEach(p => {
+    const h = hs[p.conn.id] || 0;
+    p.t += p.baseSpeed * (1 + h * 2.2);
+    if (p.t >= 1) p.t -= 1;
+  });
+}
+
+function drawPulses() {
+  PULSES.forEach(p => {
+    const { conn, t } = p;
+    const f = nodePos(conn.from);
+    const to = nodePos(conn.to);
+    const h = hs[conn.id] || 0;
+
+    const x = f.x + (to.x - f.x) * t;
+    const y = f.y + (to.y - f.y) * t;
+
+    const r = (conn.ring ? 2.2 : 3.0) + h * 1.4;
+
+    ctx.save();
+    ctx.shadowColor = rgba(conn.color, 0.9);
+    ctx.shadowBlur  = 14 + h * 10;
+
+    // Head
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fillStyle = rgba(conn.color, 0.92 + h * 0.08);
+    ctx.fill();
+
+    // Tail (5 fading dots)
+    ctx.shadowBlur = 0;
+    for (let k = 1; k <= 5; k++) {
+      const tt = t - k * 0.022;
+      if (tt < 0) continue;
+      const tx = f.x + (to.x - f.x) * tt;
+      const ty = f.y + (to.y - f.y) * tt;
+      ctx.beginPath();
+      ctx.arc(tx, ty, Math.max(r * (1 - k * 0.14), 0.5), 0, Math.PI * 2);
+      ctx.fillStyle = rgba(conn.color, (1 - k / 5) * 0.45);
+      ctx.fill();
+    }
+    ctx.restore();
+  });
+}
+
+// ─── Particles ────────────────────────────────────────────────────────────────
+
+let particles = [];
+let mouseX = 0, mouseY = 0;
+
+function buildParticles() {
+  particles = Array.from({ length: 85 }, () => ({
+    x: Math.random() * W,
+    y: Math.random() * H,
+    vx: (Math.random() - 0.5) * 0.18,
+    vy: (Math.random() - 0.5) * 0.18,
+    r: 0.5 + Math.random() * 1.1,
+    a: 0.07 + Math.random() * 0.18,
+  }));
+}
+
+function updateParticles() {
+  particles.forEach(p => {
+    // Gentle mouse attraction
+    p.vx += (mouseX - p.x) * 0.000018;
+    p.vy += (mouseY - p.y) * 0.000018;
+    p.vx *= 0.992;
+    p.vy *= 0.992;
+    p.x += p.vx;
+    p.y += p.vy;
+    // Wrap
+    if (p.x < -2) p.x = W + 2;
+    else if (p.x > W + 2) p.x = -2;
+    if (p.y < -2) p.y = H + 2;
+    else if (p.y > H + 2) p.y = -2;
+  });
+}
+
+function drawParticles() {
+  // Dots
+  particles.forEach(p => {
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(0,190,230,${p.a})`;
+    ctx.fill();
+  });
+
+  // Neighbour lines (O(n²) but only 85 particles, fine at 60fps)
+  ctx.lineWidth = 0.5;
+  for (let i = 0; i < particles.length; i++) {
+    for (let j = i + 1; j < particles.length; j++) {
+      const dx = particles[j].x - particles[i].x;
+      const dy = particles[j].y - particles[i].y;
+      const d2 = dx * dx + dy * dy;
+      if (d2 < 7000) { // ~83px
+        const a = (1 - Math.sqrt(d2) / 83) * 0.055;
+        ctx.beginPath();
+        ctx.moveTo(particles[i].x, particles[i].y);
+        ctx.lineTo(particles[j].x, particles[j].y);
+        ctx.strokeStyle = `rgba(0,190,230,${a})`;
+        ctx.stroke();
+      }
+    }
+  }
+}
+
+// ─── Main Loop ────────────────────────────────────────────────────────────────
+
+function loop() {
+  ctx.clearRect(0, 0, W, H);
+
+  updateHover();
+  updateParticles();
+  updatePulses();
+
+  drawParticles();
+  drawConnections();
+  drawPulses();
+
+  requestAnimationFrame(loop);
+}
+
+// ─── Init & Events ────────────────────────────────────────────────────────────
+
+let resizeTimer;
+
+window.addEventListener('resize', () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => {
+    resizeCanvas();
+    positionNodes();
+    buildParticles();
+  }, 80);
+});
+
+window.addEventListener('mousemove', e => {
+  mouseX = e.clientX;
+  mouseY = e.clientY;
+});
+
+// Init
+resizeCanvas();
+buildNodes();
+buildPulses();
+buildParticles();
+positionNodes();
+mouseX = W / 2;
+mouseY = H / 2;
+loop();
+</script>
+</body>
+</html>
